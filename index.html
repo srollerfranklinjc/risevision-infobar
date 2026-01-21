@@ -1,8 +1,9 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=1920,height=200" />
+  <meta name="viewport" content="width=1920,height=200,initial-scale=1" />
+  <title>RiseVision Info Bar</title>
 
   <style>
     body {
@@ -18,7 +19,7 @@
       width: 1920px;
       height: 200px;
       background: #111;
-      color: #ffffff;
+      color: #fff;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -36,6 +37,7 @@
       display: flex;
       flex-direction: column;
       line-height: 1.1;
+      min-width: 320px;
     }
 
     .label {
@@ -48,6 +50,7 @@
     .value {
       font-size: 72px;
       font-weight: 700;
+      white-space: nowrap;
     }
 
     .week {
@@ -86,80 +89,96 @@
   <script>
     /* ================= CONFIG ================= */
     const TIMEZONE = "America/New_York";
-    const CITY_QUERY = "Jersey City, NJ";
+
+    // Use fixed coordinates to avoid geocoding/network blocks
+    // Example: Jersey City, NJ
+    const LAT = 40.7178;
+    const LON = -74.0431;
+
+    // Google Sheets cell that contains the already-computed academic week number
+    // (you said this part is working now)
     const WEEK_CSV_URL =
-      "https://docs.google.com/spreadsheets/d/1oa9aJWijnqdH8Jt0qZbrRyKVKrMhzgzqxP_t2WsCyxs/gviz/tq?tqx=out:csv&sheet=Config&range=B1";
+      "https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/gviz/tq?tqx=out:csv&sheet=Config&range=B1";
     /* ========================================== */
 
     function updateClock() {
       const now = new Date();
-      document.getElementById("date").textContent =
-        new Intl.DateTimeFormat("en-US", {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-          timeZone: TIMEZONE
-        }).format(now);
 
-      document.getElementById("time").textContent =
-        new Intl.DateTimeFormat("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          timeZone: TIMEZONE
-        }).format(now);
+      const dateText = new Intl.DateTimeFormat("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        timeZone: TIMEZONE
+      }).format(now);
+
+      const timeText = new Intl.DateTimeFormat("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: TIMEZONE
+      }).format(now);
+
+      document.getElementById("date").textContent = dateText;
+      document.getElementById("time").textContent = timeText;
     }
 
     async function updateWeek() {
       try {
         const res = await fetch(WEEK_CSV_URL, { cache: "no-store" });
         const text = (await res.text()).trim();
-        document.getElementById("week").textContent =
-          text.replace(/[^\w\s]/g, "") || "—";
-      } catch {
+
+        // Keep only readable characters; gviz sometimes includes quotes/newlines
+        const cleaned = text.replace(/["'\r\n]+/g, "").trim();
+        document.getElementById("week").textContent = cleaned || "—";
+      } catch (e) {
         document.getElementById("week").textContent = "—";
       }
     }
 
-<script>
-  /* ================= CONFIG ================= */
-  const TIMEZONE = "America/New_York";
+    async function updateWeather() {
+      try {
+        // Use Open-Meteo forecast endpoint with fixed coordinates.
+        // We request BOTH formats to be resilient:
+        // - current=temperature_2m (newer style)
+        // - current_weather=true (older style)
+        const url =
+          "https://api.open-meteo.com/v1/forecast" +
+          `?latitude=${encodeURIComponent(LAT)}` +
+          `&longitude=${encodeURIComponent(LON)}` +
+          "&current=temperature_2m" +
+          "&current_weather=true" +
+          "&temperature_unit=fahrenheit" +
+          `&timezone=${encodeURIComponent(TIMEZONE)}`;
 
-  // Set these once (example: Jersey City)
-  const LAT = 40.7178;
-  const LON = -74.0431;
+        const res = await fetch(url, { cache: "no-store" });
+        const data = await res.json();
 
-  /* ========================================== */
+        // Prefer new style, fall back to old style
+        const tempNew = data && data.current && typeof data.current.temperature_2m === "number"
+          ? data.current.temperature_2m
+          : null;
 
-  async function updateWeather() {
-    try {
-      const url =
-        `https://api.open-meteo.com/v1/forecast` +
-        `?latitude=${LAT}&longitude=${LON}` +
-        `&current=temperature_2m` +
-        `&temperature_unit=fahrenheit` +
-        `&timezone=${encodeURIComponent(TIMEZONE)}`;
+        const tempOld = data && data.current_weather && typeof data.current_weather.temperature === "number"
+          ? data.current_weather.temperature
+          : null;
 
-      const res = await fetch(url, { cache: "no-store" });
-      const data = await res.json();
+        const temp = (tempNew !== null) ? tempNew : tempOld;
 
-      // Newer Open-Meteo format: data.current.temperature_2m :contentReference[oaicite:1]{index=1}
-      const temp = data?.current?.temperature_2m;
-
-      document.getElementById("weather").textContent =
-        (temp === null || temp === undefined) ? "—" : `${Math.round(temp)}°F`;
-    } catch (e) {
-      document.getElementById("weather").textContent = "—";
+        document.getElementById("weather").textContent =
+          (temp === null || temp === undefined) ? "—" : (Math.round(temp) + "°F");
+      } catch (e) {
+        document.getElementById("weather").textContent = "—";
+      }
     }
-  }
-</script>
+
+    // Initial paint
     updateClock();
     updateWeek();
     updateWeather();
 
+    // Timers
     setInterval(updateClock, 1000);
     setInterval(updateWeek, 5 * 60 * 1000);
     setInterval(updateWeather, 10 * 60 * 1000);
   </script>
 </body>
 </html>
-
