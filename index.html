@@ -1,1 +1,154 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1920,height=200" />
+
+  <style>
+    body {
+      margin: 0;
+      width: 1920px;
+      height: 200px;
+      background: transparent;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    #bar {
+      width: 1920px;
+      height: 200px;
+      background: #111;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 60px;
+      box-sizing: border-box;
+    }
+
+    .group {
+      display: flex;
+      gap: 48px;
+      align-items: baseline;
+    }
+
+    .item {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+    }
+
+    .label {
+      font-size: 28px;
+      color: #cfcfcf;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .value {
+      font-size: 72px;
+      font-weight: 700;
+    }
+
+    .week {
+      color: #4fd1c5;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="bar">
+    <div class="group">
+      <div class="item">
+        <div class="label">Date</div>
+        <div id="date" class="value">—</div>
+      </div>
+
+      <div class="item">
+        <div class="label">Time</div>
+        <div id="time" class="value">—</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="item">
+        <div class="label">Weather</div>
+        <div id="weather" class="value">—</div>
+      </div>
+
+      <div class="item">
+        <div class="label">Academic Week</div>
+        <div id="week" class="value week">—</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ================= CONFIG ================= */
+    const TIMEZONE = "America/New_York";
+    const CITY_QUERY = "Jersey City, NJ";
+    const WEEK_CSV_URL =
+      "https://docs.google.com/spreadsheets/d/1oa9aJWijnqdH8Jt0qZbrRyKVKrMhzgzqxP_t2WsCyxs/gviz/tq?tqx=out:csv&sheet=Config&range=B1";
+    /* ========================================== */
+
+    function updateClock() {
+      const now = new Date();
+      document.getElementById("date").textContent =
+        new Intl.DateTimeFormat("en-US", {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+          timeZone: TIMEZONE
+        }).format(now);
+
+      document.getElementById("time").textContent =
+        new Intl.DateTimeFormat("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          timeZone: TIMEZONE
+        }).format(now);
+    }
+
+    async function updateWeek() {
+      try {
+        const res = await fetch(WEEK_CSV_URL, { cache: "no-store" });
+        const text = (await res.text()).trim();
+        document.getElementById("week").textContent =
+          text.replace(/[^\w\s]/g, "") || "—";
+      } catch {
+        document.getElementById("week").textContent = "—";
+      }
+    }
+
+    async function updateWeather() {
+      try {
+        const geo = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+            CITY_QUERY
+          )}&count=1`
+        );
+        const g = await geo.json();
+        const { latitude, longitude } = g.results[0];
+
+        const wx = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&temperature_unit=fahrenheit`
+        );
+        const w = await wx.json();
+        document.getElementById("weather").textContent =
+          Math.round(w.current_weather.temperature) + "°F";
+      } catch {
+        document.getElementById("weather").textContent = "—";
+      }
+    }
+
+    updateClock();
+    updateWeek();
+    updateWeather();
+
+    setInterval(updateClock, 1000);
+    setInterval(updateWeek, 5 * 60 * 1000);
+    setInterval(updateWeather, 10 * 60 * 1000);
+  </script>
+</body>
+</html>
 
