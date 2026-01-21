@@ -130,16 +130,18 @@
       }
 
       async function updateWeather() {
-        try {
-          // Step 1: Geocode the city
-          const geoRes = await fetch(
-            "https://geocoding-api.open-meteo.com/v1/search?name=" +
-              encodeURIComponent(CITY_QUERY) +
-              "&count=1",
-            { cache: "no-store" }
-          );
+        const cacheBust = Date.now();
 
+        try {
+          // Step 1: Geocode the city (cache-busted)
+          const geoUrl =
+            "https://geocoding-api.open-meteo.com/v1/search?name=" +
+            encodeURIComponent(CITY_QUERY) +
+            "&count=1&_=" + cacheBust;
+
+          const geoRes = await fetch(geoUrl, { cache: "no-store" });
           const geoData = await geoRes.json();
+
           if (!geoData.results || !geoData.results.length) {
             throw new Error("No geocoding results");
           }
@@ -147,25 +149,38 @@
           const lat = geoData.results[0].latitude;
           const lon = geoData.results[0].longitude;
 
-          // Step 2: Fetch current weather
-          const wxRes = await fetch(
+          // Step 2: Fetch current weather (cache-busted)
+          // Ask for BOTH response styles for resilience
+          const wxUrl =
             "https://api.open-meteo.com/v1/forecast" +
-              "?latitude=" + lat +
-              "&longitude=" + lon +
-              "&current_weather=true" +
-              "&temperature_unit=fahrenheit",
-            { cache: "no-store" }
-          );
+            "?latitude=" + encodeURIComponent(lat) +
+            "&longitude=" + encodeURIComponent(lon) +
+            "&current_weather=true" +
+            "&current=temperature_2m" +
+            "&temperature_unit=fahrenheit" +
+            "&timezone=" + encodeURIComponent(TIMEZONE) +
+            "&_=" + cacheBust;
 
+          const wxRes = await fetch(wxUrl, { cache: "no-store" });
           const wxData = await wxRes.json();
-          const temp = wxData.current_weather &&
-                       typeof wxData.current_weather.temperature === "number"
-            ? wxData.current_weather.temperature
-            : null;
+
+          // Prefer new style if present; fall back to old style
+          let temp = null;
+
+          if (wxData && wxData.current && typeof wxData.current.temperature_2m === "number") {
+            temp = wxData.current.temperature_2m;
+          } else if (
+            wxData && wxData.current_weather &&
+            typeof wxData.current_weather.temperature === "number"
+          ) {
+            temp = wxData.current_weather.temperature;
+          }
 
           document.getElementById("weather").textContent =
             temp === null ? "—" : Math.round(temp) + "°F";
+
         } catch (e) {
+          // If you want a temporary debug indicator, replace "—" with "WX ERR"
           document.getElementById("weather").textContent = "—";
         }
       }
